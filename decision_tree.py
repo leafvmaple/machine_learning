@@ -1,0 +1,107 @@
+import math
+import numpy as np
+
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+
+class NodeInfo:
+    def __init__(self, col, val, uncert):
+        self.col = col
+        self.val = val
+        self.uncert = uncert # gini or entropy
+        self.gain = 0
+
+    def checkrow(self, data):
+        return data[self.col] >= self.val
+
+    def checkrows(self, data):
+        return data[:,self.col] >= self.val
+
+class Leaf:
+    def __init__(self, data, uncert):
+        self.predict = np.sum(data[:,-1]) / float(data.shape[0])
+        self.uncert = uncert
+
+class DecisionNode:
+    def __init__(self, left_branch, right_branch, info):
+        self.left = left_branch
+        self.right = right_branch
+        self.info = info
+
+class DecisionTreeClassifier:
+    def __init__(self, criterion='gini', max_depth=3):
+        self.max_depth = max_depth
+        if criterion == 'gini':
+            self.core = lambda x: 2 * x * (1 - x)
+        elif criterion == 'entropy':
+            self.core = lambda x: - x * np.log2(x) - (1 - x) * np.log2((1 - x))
+
+    def fit(self, X, y):
+        self.branch = self.build_tree(np.column_stack((X, y)), 0)
+        return self.branch
+
+    def score(self, X, y):
+        score_error = 0
+        for i in range(0, X.shape[0]):
+            score_error += abs(y[i] - self.classify(X[i], self.branch))
+        return (X.shape[0] - score_error) / float(X.shape[0])
+
+    def get_uncertainty(self, data):
+        prob = np.sum(data[:,-1]) / data.shape[0]
+        return 0 if prob == 0 or prob == 1 else self.core(prob)
+
+    def get_gain(self, current_uncert, left, right):
+        count = left.shape[0] + right.shape[0]
+        left_uncert = self.get_uncertainty(left)
+        right_uncert = self.get_uncertainty(right)
+        return current_uncert - left.shape[0] / float(count) * left_uncert - right.shape[0] / float(count) * right_uncert
+
+    def partition(self, data, info):
+        left = data[np.transpose((info.checkrows(data)) == 0)]
+        right = data[np.transpose(info.checkrows(data))]
+        return left, right
+
+    def traversal(self, data, uncert):
+        optimun_info = None
+        for i in range(0, data.shape[1] - 1):
+            values = [row[i] for row in data]
+            values.sort()
+
+            for val in values:
+                info = NodeInfo(i, val, uncert)
+                left, right = self.partition(data, info)
+                if len(left) == 0 or len(right) == 0:
+                    continue
+                info.gain = self.get_gain(uncert, left, right)
+                if optimun_info is None or info.gain > optimun_info.gain:
+                    optimun_info = info
+
+        return optimun_info
+
+    def build_tree(self, data, depth):
+        uncert = self.get_uncertainty(data)
+
+        if depth >= self.max_depth:
+            return Leaf(data, uncert)
+
+        info = self.traversal(data, uncert)
+        if info is None:
+            return Leaf(data, uncert)
+
+        left, right = self.partition(data, info)
+        return DecisionNode(self.build_tree(left, depth + 1), self.build_tree(right, depth + 1), info)
+
+    def classify(self, data, node):
+        if isinstance(node, Leaf):
+            return node.predict
+        return self.classify(data, node.right if node.info.checkrow(data) else node.left)
+
+
+data = load_breast_cancer()
+X_train, X_test, y_train, y_test = train_test_split(data.data, data.target, test_size=0.2, random_state=0)
+
+model = DecisionTreeClassifier(max_depth=25)
+model.fit(X_train, y_train)
+
+print(model.score(X_train, y_train))
+print(model.score(X_test, y_test))
