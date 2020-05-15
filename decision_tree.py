@@ -1,4 +1,6 @@
 import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
 
 class Leaf:
     def __init__(self, data, uncert):
@@ -91,3 +93,14 @@ class DecisionTreeClassifier:
         if isinstance(node, Leaf):
             return node.predict
         return self.__classify(data, node.right if node.info.checkrow(data) else node.left)
+
+# Test
+if __name__ == "__main__":
+    data = load_breast_cancer()
+    X_train, X_test, y_train, y_test = train_test_split(data.data, data.target, test_size=0.2, random_state=0)
+
+    model = DecisionTreeClassifier(max_depth=10)
+    model.fit(X_train, y_train)
+
+    print(model.score(X_train, y_train))
+    print(model.score(X_test, y_test))
